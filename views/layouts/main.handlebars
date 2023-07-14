@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Node.js Blog</title>
+</head>
+<body>
+    <div class="container">
+        <!-- Navigation Bar -->
+        <nav>
+            <a href="/">Home</a>
+            <!-- If user is logged in -->
+            {{#if user}}
+                <a href="/new">Create a new post</a> <!-- Add this line -->
+                <a href="/users/logout">Logout</a>
+            <!-- If user is not logged in -->
+            {{else}}
+                <a href="/users/register">Register</a>
+                <a href="/users/login">Login</a>
+            {{/if}}
+        </nav>
+        
+        <!-- Flash Messages -->
+        {{> messages}}
+
+        <!-- Main Content -->
+        {{{body}}}
+    </div>
+</body>
+</html>

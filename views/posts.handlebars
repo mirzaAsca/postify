@@ -1,0 +1,7 @@
+<h2>All Posts</h2>
+{{#each posts}}
+    <div>
+        <h3><a href="/post/{{this._id}}">{{this.title}}</a></h3>
+        <p>Posted by {{this.author.username}} on {{formatDate this.date}}</p>
+    </div>
+{{/each}}
