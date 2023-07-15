@@ -6,7 +6,7 @@ const bodyParser = require("body-parser");
 const methodOverride = require("method-override");
 const flash = require("connect-flash");
 const express = require("express");
-const moment = require("moment"); // Make sure moment is required
+const moment = require("moment");
 
 const app = express();
 
@@ -48,6 +48,7 @@ app.use((req, res, next) => {
 
 // Global variable for user
 app.use((req, res, next) => {
+  console.log("Middleware User: ", req.user);
   res.locals.user = req.user || null;
   next();
 });
@@ -55,18 +56,33 @@ app.use((req, res, next) => {
 // Method override for PUT and DELETE forms
 app.use(methodOverride("_method"));
 
-// Define formatDate helper
+// Define formatDate and eq helpers
 const helpers = {
   formatDate: function (date) {
     return moment(date).format("MMMM Do YYYY");
+  },
+  eq: function (arg1, arg2) {
+    const result = arg1.toString() == arg2.toString();
+    console.log(`Comparing ${arg1} and ${arg2}: ${result}`);
+    return result;
+  },
+  log: function (value) {
+    console.log("View Value: ", value);
   },
 };
 
 // Handlebars
 app.engine(
   "handlebars",
-  expressHandlebars({ defaultLayout: "main", helpers: helpers })
-); // Pass the helpers
+  expressHandlebars({
+    defaultLayout: "main",
+    helpers: helpers,
+    runtimeOptions: {
+      allowProtoPropertiesByDefault: true,
+    },
+  })
+);
+
 app.set("view engine", "handlebars");
 
 // Routes

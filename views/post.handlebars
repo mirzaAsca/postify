@@ -1,6 +1,10 @@
+{{log user}}
+{{log post.author._id}}
 <h2>{{post.title}}</h2>
 <p>Posted by {{post.author.username}} on {{formatDate post.date}}</p>
 <p>{{post.description}}</p>
+
+<!-- Comments Section -->
 {{#if post.comments}}
   <h3>Comments:</h3>
   {{#each post.comments}}
@@ -9,10 +13,21 @@
     </div>
   {{/each}}
 {{/if}}
+
+<!-- Logged in user's section -->
 {{#if user}}
+  <!-- Comment Form -->
   <form action="/post/{{post._id}}/comments" method="post">
     <label for="comment">Add a comment:</label>
     <textarea name="comment" id="comment" required></textarea>
     <button type="submit">Add Comment</button>
   </form>
+
+  <!-- Edit and Delete buttons visible only to the author of the post -->
+  {{#if (eq user._id post.author._id)}}
+    <a href="/edit/{{post._id}}">Edit</a>
+    <form action="/post/{{post._id}}?_method=DELETE" method="post">
+      <button type="submit">Delete</button>
+    </form>
+  {{/if}}
 {{/if}}

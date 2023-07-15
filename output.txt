@@ -1,0 +1,497 @@
+├── .git
+├── config
+│   ├── auth.js
+│   └── passport.js
+├── models
+│   ├── Post.js
+│   └── User.js
+├── node_modules
+├── output.txt
+├── package-lock.json
+├── package.json
+├── routes
+│   ├── index.js
+│   └── users.js
+├── server.js
+├── structure.py
+└── views
+    ├── edit.handlebars
+    ├── layouts
+    │   └── main.handlebars
+    ├── login.handlebars
+    ├── new.handlebars
+    ├── partials
+    │   └── messages.handlebars
+    ├── post.handlebars
+    ├── posts.handlebars
+    └── register.handlebars
+
+==============================
+
+-auth.js
+module.exports = {
+  ensureAuthenticated: function (req, res, next) {
+    if (req.isAuthenticated()) {
+      return next();
+    }
+    req.flash("error_msg", "Please log in to view this resource");
+    res.redirect("/users/login");
+  },
+  forwardAuthenticated: function (req, res, next) {
+    if (!req.isAuthenticated()) {
+      return next();
+    }
+    res.redirect("/dashboard"); // change this to the route you want to redirect to after login
+  },
+};
+
+
+==============================
+
+-passport.js
+const LocalStrategy = require("passport-local").Strategy;
+const User = require("../models/User");
+
+module.exports = function (passport) {
+  passport.use(
+    new LocalStrategy(async function (username, password, done) {
+      try {
+        const user = await User.findOne({ username: username });
+        if (!user) {
+          return done(null, false, { message: "Incorrect username." });
+        }
+        if (!user.validPassword(password)) {
+          return done(null, false, { message: "Incorrect password." });
+        }
+        return done(null, user);
+      } catch (err) {
+        return done(err);
+      }
+    })
+  );
+
+  passport.serializeUser(function (user, done) {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async function (id, done) {
+    try {
+      const user = await User.findById(id);
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
+  });
+};
+
+
+==============================
+
+-Post.js
+const mongoose = require('mongoose');
+
+const PostSchema = new mongoose.Schema({
+    title: String,
+    date: { type: Date, default: Date.now },
+    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    description: String,
+    comments: [{ body: String, date: Date, author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' } }]
+});
+
+module.exports = mongoose.model('Post', PostSchema);
+
+
+==============================
+
+-User.js
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+
+const UserSchema = new mongoose.Schema({
+  username: String,
+  password: String,
+  posts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Post" }],
+});
+
+UserSchema.methods.generateHash = function (password) {
+  return bcrypt.hashSync(password, bcrypt.genSaltSync(8), null);
+};
+
+UserSchema.methods.validPassword = function (password) {
+  return bcrypt.compareSync(password, this.password);
+};
+
+module.exports = mongoose.model("User", UserSchema);
+
+
+==============================
+
+-index.js
+const express = require("express");
+const router = express.Router();
+const Post = require("../models/Post");
+const { ensureAuthenticated } = require("../config/auth");
+
+// Get all posts
+router.get("/", async (req, res) => {
+  const posts = await Post.find({}).populate("author").lean();
+  res.render("posts", { posts });
+});
+
+// Get single post
+router.get("/post/:id", async (req, res) => {
+  const post = await Post.findById(req.params.id).populate("author").lean();
+  res.render("post", { post });
+});
+
+// Create new post
+router.get("/new", ensureAuthenticated, (req, res) => res.render("new"));
+
+router.post("/new", ensureAuthenticated, async (req, res) => {
+  // req.body.post doesn't exist, extract title and description directly from req.body
+  const { title, description } = req.body;
+
+  const newPost = new Post({
+    title,
+    description,
+    author: req.user._id,
+  });
+
+  await newPost.save();
+  res.redirect("/");
+});
+
+// Edit post
+router.get("/edit/:id", ensureAuthenticated, async (req, res) => {
+  const post = await Post.findById(req.params.id).populate("author").lean();
+  if (req.user._id.toString() === post.author._id.toString()) {
+    res.render("edit", { post });
+  } else {
+    res.redirect("/");
+  }
+});
+router.put("/post/:id", ensureAuthenticated, async (req, res) => {
+  const post = await Post.findById(req.params.id).populate("author");
+  if (req.user._id.toString() === post.author._id.toString()) {
+    post.title = req.body.post.title;
+    post.description = req.body.post.description;
+    await post.save();
+    res.redirect(`/post/${post._id}`);
+  } else {
+    res.redirect("/");
+  }
+});
+
+// Delete post
+router.delete("/post/:id", ensureAuthenticated, async (req, res) => {
+  const post = await Post.findById(req.params.id).populate("author");
+  if (
+    post.author._id.toString() === req.user._id.toString() &&
+    post.comments.length === 0
+  ) {
+    await post.remove();
+  }
+  res.redirect("/");
+});
+
+module.exports = router;
+
+
+==============================
+
+-users.js
+const express = require("express");
+const router = express.Router();
+const passport = require("passport");
+const User = require("../models/User");
+// Register
+router.get("/register", (req, res) => res.render("register"));
+router.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+  const newUser = new User({ username, password });
+  newUser.password = newUser.generateHash(password);
+  await newUser.save();
+  req.flash("success_msg", "You are now registered and can log in");
+  res.redirect("/users/login");
+});
+
+// Login
+router.get("/login", (req, res) => res.render("login"));
+router.post(
+  "/login",
+  passport.authenticate("local", {
+    successRedirect: "/",
+    failureRedirect: "/users/login",
+    failureFlash: true,
+  })
+);
+
+// Logout
+router.get("/logout", (req, res, next) => {
+  req.logout((err) => {
+    if (err) {
+      return next(err);
+    }
+    req.flash("success_msg", "You are logged out");
+    res.redirect("/users/login");
+  });
+});
+
+module.exports = router;
+
+
+==============================
+
+-server.js
+const expressHandlebars = require("express-handlebars").engine;
+const mongoose = require("mongoose");
+const passport = require("passport");
+const session = require("express-session");
+const bodyParser = require("body-parser");
+const methodOverride = require("method-override");
+const flash = require("connect-flash");
+const express = require("express");
+const moment = require("moment");
+
+const app = express();
+
+// Connect to MongoDB
+mongoose.connect(
+  "mongodb+srv://ascamirza:WAaDPs3jRTmlvLcs@cluster0.4csusgz.mongodb.net/?retryWrites=true&w=majority",
+  {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  }
+);
+
+// Passport Config
+require("./config/passport")(passport);
+
+// Express body parser
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+// Express session
+app.use(
+  session({ secret: "mySecret", resave: false, saveUninitialized: false })
+);
+
+// Passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Connect flash for flash messages
+app.use(flash());
+
+// Global variables for flash messages
+app.use((req, res, next) => {
+  res.locals.success_msg = req.flash("success_msg");
+  res.locals.error_msg = req.flash("error_msg");
+  res.locals.error = req.flash("error");
+  next();
+});
+
+// Global variable for user
+app.use((req, res, next) => {
+  res.locals.user = req.user || null;
+  next();
+});
+
+// Method override for PUT and DELETE forms
+app.use(methodOverride("_method"));
+
+// Define formatDate and eq helpers
+const helpers = {
+  formatDate: function (date) {
+    return moment(date).format("MMMM Do YYYY");
+  },
+  eq: function (arg1, arg2) {
+    return arg1 == arg2;
+  },
+};
+
+// Handlebars
+app.engine(
+  "handlebars",
+  expressHandlebars({ defaultLayout: "main", helpers: helpers })
+);
+app.set("view engine", "handlebars");
+
+// Routes
+app.use("/", require("./routes/index"));
+app.use("/users", require("./routes/users"));
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, console.log(`Server started on port ${PORT}`));
+
+
+==============================
+
+-edit.handlebars
+<h2>Edit Post</h2>
+<form action="/post/{{post._id}}?_method=PUT" method="post">
+    <div>
+        <label for="title">Title:</label>
+        <input type="text" name="post[title]" id="title" value="{{post.title}}" required>
+    </div>
+    <div>
+        <label for="description">Description:</label>
+        <textarea name="post[description]" id="description" required>{{post.description}}</textarea>
+    </div>
+    <button type="submit">Update Post</button>
+</form>
+
+
+==============================
+
+-main.handlebars
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Node.js Blog</title>
+</head>
+<body>
+    <div class="container">
+        <!-- Navigation Bar -->
+        <nav>
+            <a href="/">Home</a>
+            <!-- If user is logged in -->
+            {{#if user}}
+                <a href="/new">Create a new post</a> <!-- Add this line -->
+                <a href="/users/logout">Logout</a>
+            <!-- If user is not logged in -->
+            {{else}}
+                <a href="/users/register">Register</a>
+                <a href="/users/login">Login</a>
+            {{/if}}
+        </nav>
+        
+        <!-- Flash Messages -->
+        {{> messages}}
+
+        <!-- Main Content -->
+        {{{body}}}
+    </div>
+</body>
+</html>
+
+
+==============================
+
+-login.handlebars
+<h2>Login</h2>
+<form action="/users/login" method="post">
+  <div>
+    <label for="username">Username:</label>
+    <input type="text" name="username" id="username" required />
+  </div>
+  <div>
+    <label for="password">Password:</label>
+    <input type="password" name="password" id="password" required />
+  </div>
+  <button type="submit">Login</button>
+</form>
+
+==============================
+
+-new.handlebars
+<!-- views/new.handlebars -->
+
+<h2>New Post</h2>
+
+<form action="/new" method="post">
+    <div>
+        <label for="title">Title:</label>
+        <input type="text" name="title" id="title" required>
+    </div>
+    <div>
+        <label for="description">Description:</label>
+        <textarea name="description" id="description" required></textarea>
+    </div>
+    <button type="submit">Create Post</button>
+</form>
+
+
+==============================
+
+-messages.handlebars
+<!-- Success Messages -->
+{{#if success_msg}}
+    <div>{{success_msg}}</div>
+{{/if}}
+
+<!-- Error Messages -->
+{{#if error_msg}}
+    <div>{{error_msg}}</div>
+{{/if}}
+
+<!-- Passport.js Errors -->
+{{#if error}}
+    <div>{{error}}</div>
+{{/if}}
+
+
+==============================
+
+-post.handlebars
+<h2>{{post.title}}</h2>
+<p>Posted by {{post.author.username}} on {{formatDate post.date}}</p>
+<p>{{post.description}}</p>
+
+<!-- Comments Section -->
+{{#if post.comments}}
+  <h3>Comments:</h3>
+  {{#each post.comments}}
+    <div>
+      <p>{{this.body}} - {{this.author.username}}</p>
+    </div>
+  {{/each}}
+{{/if}}
+
+<!-- Logged in user's section -->
+{{#if user}}
+  <!-- Comment Form -->
+  <form action="/post/{{post._id}}/comments" method="post">
+    <label for="comment">Add a comment:</label>
+    <textarea name="comment" id="comment" required></textarea>
+    <button type="submit">Add Comment</button>
+  </form>
+
+  <!-- Edit and Delete buttons visible only to the author of the post -->
+  {{#if (eq user._id post.author._id)}}
+    <a href="/edit/{{post._id}}">Edit</a>
+    <form action="/post/{{post._id}}?_method=DELETE" method="post">
+      <button type="submit">Delete</button>
+    </form>
+  {{/if}}
+{{/if}}
+
+
+==============================
+
+-posts.handlebars
+<h2>All Posts</h2>
+{{#each posts}}
+    <div>
+        <h3><a href="/post/{{this._id}}">{{this.title}}</a></h3>
+        <p>Posted by {{this.author.username}} on {{formatDate this.date}}</p>
+    </div>
+{{/each}}
+
+
+==============================
+
+-register.handlebars
+<h2>Register</h2>
+<form action="/users/register" method="post">
+  <div>
+    <label for="username">Username:</label>
+    <input type="text" name="username" id="username" required />
+  </div>
+  <div>
+    <label for="password">Password:</label>
+    <input type="password" name="password" id="password" required />
+  </div>
+  <button type="submit">Register</button>
+</form>

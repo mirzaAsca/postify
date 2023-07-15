@@ -34,16 +34,20 @@ router.post("/new", ensureAuthenticated, async (req, res) => {
 
 // Edit post
 router.get("/edit/:id", ensureAuthenticated, async (req, res) => {
-  const post = await Post.findById(req.params.id).lean();
-  if (post.author._id.toString() === req.user._id.toString()) {
+  const post = await Post.findById(req.params.id)
+    .populate("author")
+    .lean()
+    .exec();
+  console.log("Route User: ", req.user); // Add this line
+  if (req.user._id.toString() === post.author._id.toString()) {
     res.render("edit", { post });
   } else {
     res.redirect("/");
   }
 });
 router.put("/post/:id", ensureAuthenticated, async (req, res) => {
-  const post = await Post.findById(req.params.id);
-  if (post.author._id.toString() === req.user._id.toString()) {
+  const post = await Post.findById(req.params.id).populate("author");
+  if (req.user._id.toString() === post.author._id.toString()) {
     post.title = req.body.post.title;
     post.description = req.body.post.description;
     await post.save();
@@ -56,12 +60,17 @@ router.put("/post/:id", ensureAuthenticated, async (req, res) => {
 // Delete post
 router.delete("/post/:id", ensureAuthenticated, async (req, res) => {
   const post = await Post.findById(req.params.id);
-  if (
-    post.author._id.toString() === req.user._id.toString() &&
-    post.comments.length === 0
-  ) {
-    await post.remove();
+  if (!post) {
+    console.log("Post not found");
+    return res.status(404).send("Post not found");
   }
+  if (post.author._id.toString() !== req.user._id.toString()) {
+    return res.status(403).send("Not authorized");
+  }
+  if (post.comments.length > 0) {
+    return res.status(403).send("Cannot delete post with comments");
+  }
+  await Post.deleteOne({ _id: req.params.id }); // Use Post.deleteOne() here
   res.redirect("/");
 });
 
