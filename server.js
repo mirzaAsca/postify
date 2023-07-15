@@ -89,7 +89,33 @@ app.engine(
   "handlebars",
   expressHandlebars({
     defaultLayout: "main",
-    helpers: helpers,
+    helpers: {
+      formatDate: function (date) {
+        return moment(date).format("MMMM Do YYYY");
+      },
+      eq: function (arg1, arg2) {
+        return arg1.toString() == arg2.toString();
+      },
+      log: function (value) {
+        console.log("View Value: ", value);
+      },
+      add: function (value, addition) {
+        return value + addition;
+      },
+      subtract: function (value, subtractor) {
+        return value - subtractor;
+      },
+      gt: function (value1, value2) {
+        return value1 > value2;
+      },
+      lt: function (value1, value2) {
+        return value1 < value2;
+      },
+      // New "json" helper
+      json: function (context) {
+        return JSON.stringify(context);
+      },
+    },
     runtimeOptions: {
       allowProtoPropertiesByDefault: true,
     },

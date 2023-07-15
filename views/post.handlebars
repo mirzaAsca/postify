@@ -14,20 +14,90 @@
   {{/each}}
 {{/if}}
 
+<!-- Comment Form -->
+<form action="/post/{{post._id}}/comments" method="post" id="comment-form">
+  <label for="comment">Add a comment:</label>
+  <textarea name="comment" id="comment" required></textarea>
+  <button type="submit" id="comment-submit-button">Add Comment</button>
+</form>
+<p id="comment-message" style="color: red;"></p>
+<!-- Message placeholder -->
+
+
 <!-- Logged in user's section -->
 {{#if user}}
-  <!-- Comment Form -->
-  <form action="/post/{{post._id}}/comments" method="post">
-    <label for="comment">Add a comment:</label>
-    <textarea name="comment" id="comment" required></textarea>
-    <button type="submit">Add Comment</button>
-  </form>
-
   <!-- Edit and Delete buttons visible only to the author of the post -->
   {{#if (eq user._id post.author._id)}}
     <a href="/edit/{{post._id}}">Edit</a>
-    <form action="/post/{{post._id}}?_method=DELETE" method="post">
+    <form
+      action="/post/{{post._id}}?_method=DELETE"
+      method="post"
+      id="delete-form"
+    >
       <button type="submit">Delete</button>
     </form>
+    <!-- Delete Error Message -->
+      <p id="delete-message" style="color: red;"></p>
+
   {{/if}}
 {{/if}}
+
+<script>
+  document.getElementById('comment-form').addEventListener('submit', function(e)
+  {
+    e.preventDefault();
+    
+    var user = {{{json user}}};
+    console.log(user);
+    
+    // Check if user is null or an empty object
+    if (!user || Object.keys(user).length === 0) {
+      document.getElementById('comment-message').textContent = 'Please log in or register to comment this post.';
+      // Prevent the form from being submitted
+    } else {
+      // If the user is authenticated, submit the form manually using AJAX
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", this.action, true);
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      xhr.onreadystatechange = function() {
+        if (this.readyState === XMLHttpRequest.DONE && this.status === 200) {
+          // Request finished, reload the page
+          location.reload();
+        }
+      }
+      xhr.send(new URLSearchParams(new FormData(this)).toString());
+    }
+  });
+</script>
+
+  <script>
+  document.getElementById('delete-form').addEventListener('submit', function(e) {
+    e.preventDefault();  // Always prevent the default form submission
+
+    var user = {{{json user}}};
+    console.log(user);
+
+    // Check if user is null or an empty object
+    if (!user || Object.keys(user).length === 0) {
+      document.getElementById('delete-message').textContent = 'Please log in or register to delete this post.';
+    } else {
+      // If the user is authenticated, send a DELETE request
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", this.action, true);  // Replace with your actual DELETE route
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      xhr.onreadystatechange = function() {
+        if (this.readyState === XMLHttpRequest.DONE && this.status === 200) {
+          // Request finished, redirect to the main page (or any other page)
+          window.location.href = "/";  // Replace with your actual redirect URL
+        } else if (this.readyState === XMLHttpRequest.DONE && this.status === 400) {
+          // Handle the error (post with comments)
+          document.getElementById('delete-message').textContent = 'Cannot delete post with comments.';
+        }
+      }
+      xhr.send("_method=DELETE");
+    }
+  });
+</script>
+
+
+

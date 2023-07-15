@@ -33,7 +33,7 @@ router.get("/", async (req, res) => {
   res.render("posts", {
     posts: postsWithCommentCount,
     current: page,
-    totalPages: pages,  // total count of pages
+    totalPages: pages, // total count of pages
     prevPage: page - 1, // previous page number
     nextPage: page + 1, // next page number
     hasNextPage: page < pages, // check if there's a next page
@@ -73,6 +73,28 @@ router.post("/new", ensureAuthenticated, async (req, res) => {
 
   res.redirect("/");
 });
+
+// Post comment
+router.post("/post/:id/comments", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Please login or register to make a comment" });
+  }
+
+  const post = await Post.findById(req.params.id);
+  if (!post) {
+    return res.status(404).json({ message: "Post not found" });
+  }
+
+  post.comments.push({
+    body: req.body.comment,
+    date: Date.now(),
+    author: req.user._id,
+  });
+
+  await post.save();
+  res.redirect(`/post/${post._id}`);
+});
+
 
 // Edit post
 router.get("/edit/:id", ensureAuthenticated, async (req, res) => {
