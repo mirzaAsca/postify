@@ -69,6 +69,19 @@ const helpers = {
   log: function (value) {
     console.log("View Value: ", value);
   },
+  // Add the following helper functions
+  add: function (value, addition) {
+    return value + addition;
+  },
+  subtract: function (value, subtractor) {
+    return value - subtractor;
+  },
+  gt: function (value1, value2) {
+    return value1 > value2;
+  },
+  lt: function (value1, value2) {
+    return value1 < value2;
+  },
 };
 
 // Handlebars

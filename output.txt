@@ -134,13 +134,46 @@ const { ensureAuthenticated } = require("../config/auth");
 
 // Get all posts
 router.get("/", async (req, res) => {
-  const posts = await Post.find({}).populate("author").lean();
-  res.render("posts", { posts });
+  const perPage = 2;
+  let page = req.query.page || 1;
+
+  // Check to make sure the page number is never less than 1
+  if (page < 1) page = 1;
+
+  const posts = await Post.find({})
+    .skip(perPage * page - perPage)
+    .limit(perPage)
+    .populate("author")
+    .lean();
+
+  // Add comment count to each post
+  const postsWithCommentCount = posts.map((post) => ({
+    ...post,
+    commentCount: post.comments.length,
+  }));
+
+  const count = await Post.countDocuments();
+
+  const pages = Math.ceil(count / perPage);
+
+  // Generate an array of page numbers
+  const pageNumbers = Array.from({ length: pages }, (_, i) => i + 1);
+
+  res.render("posts", {
+    posts: postsWithCommentCount,
+    current: page,
+    pages: pageNumbers,
+  });
+
+  console.log(postsWithCommentCount);
 });
 
 // Get single post
 router.get("/post/:id", async (req, res) => {
-  const post = await Post.findById(req.params.id).populate("author").lean();
+  const post = await Post.findById(req.params.id)
+    .populate("author")
+    .populate("comments.author") // populate comment authors
+    .lean();
   res.render("post", { post });
 });
 
@@ -148,8 +181,12 @@ router.get("/post/:id", async (req, res) => {
 router.get("/new", ensureAuthenticated, (req, res) => res.render("new"));
 
 router.post("/new", ensureAuthenticated, async (req, res) => {
+  console.log("Received POST request at /new");
+
   // req.body.post doesn't exist, extract title and description directly from req.body
   const { title, description } = req.body;
+  console.log("Post title:", title);
+  console.log("Post description:", description);
 
   const newPost = new Post({
     title,
@@ -158,12 +195,18 @@ router.post("/new", ensureAuthenticated, async (req, res) => {
   });
 
   await newPost.save();
+  console.log("Saved new post:", newPost);
+
   res.redirect("/");
 });
 
 // Edit post
 router.get("/edit/:id", ensureAuthenticated, async (req, res) => {
-  const post = await Post.findById(req.params.id).populate("author").lean();
+  const post = await Post.findById(req.params.id)
+    .populate("author")
+    .lean()
+    .exec();
+  console.log("Route User: ", req.user); // Add this line
   if (req.user._id.toString() === post.author._id.toString()) {
     res.render("edit", { post });
   } else {
@@ -184,13 +227,18 @@ router.put("/post/:id", ensureAuthenticated, async (req, res) => {
 
 // Delete post
 router.delete("/post/:id", ensureAuthenticated, async (req, res) => {
-  const post = await Post.findById(req.params.id).populate("author");
-  if (
-    post.author._id.toString() === req.user._id.toString() &&
-    post.comments.length === 0
-  ) {
-    await post.remove();
+  const post = await Post.findById(req.params.id);
+  if (!post) {
+    console.log("Post not found");
+    return res.status(404).send("Post not found");
   }
+  if (post.author._id.toString() !== req.user._id.toString()) {
+    return res.status(403).send("Not authorized");
+  }
+  if (post.comments.length > 0) {
+    return res.status(403).send("Cannot delete post with comments");
+  }
+  await Post.deleteOne({ _id: req.params.id }); // Use Post.deleteOne() here
   res.redirect("/");
 });
 
@@ -293,6 +341,7 @@ app.use((req, res, next) => {
 
 // Global variable for user
 app.use((req, res, next) => {
+  console.log("Middleware User: ", req.user);
   res.locals.user = req.user || null;
   next();
 });
@@ -306,15 +355,40 @@ const helpers = {
     return moment(date).format("MMMM Do YYYY");
   },
   eq: function (arg1, arg2) {
-    return arg1 == arg2;
+    const result = arg1.toString() == arg2.toString();
+    console.log(`Comparing ${arg1} and ${arg2}: ${result}`);
+    return result;
+  },
+  log: function (value) {
+    console.log("View Value: ", value);
+  },
+  // Add the following helper functions
+  add: function (value, addition) {
+    return value + addition;
+  },
+  subtract: function (value, subtractor) {
+    return value - subtractor;
+  },
+  gt: function (value1, value2) {
+    return value1 > value2;
+  },
+  lt: function (value1, value2) {
+    return value1 < value2;
   },
 };
 
 // Handlebars
 app.engine(
   "handlebars",
-  expressHandlebars({ defaultLayout: "main", helpers: helpers })
+  expressHandlebars({
+    defaultLayout: "main",
+    helpers: helpers,
+    runtimeOptions: {
+      allowProtoPropertiesByDefault: true,
+    },
+  })
 );
+
 app.set("view engine", "handlebars");
 
 // Routes
@@ -401,17 +475,16 @@ app.listen(PORT, console.log(`Server started on port ${PORT}`));
 <h2>New Post</h2>
 
 <form action="/new" method="post">
-    <div>
-        <label for="title">Title:</label>
-        <input type="text" name="title" id="title" required>
-    </div>
-    <div>
-        <label for="description">Description:</label>
-        <textarea name="description" id="description" required></textarea>
-    </div>
-    <button type="submit">Create Post</button>
+  <div>
+    <label for="title">Title:</label>
+    <input type="text" name="title" id="title" required />
+  </div>
+  <div>
+    <label for="description">Description:</label>
+    <textarea name="description" id="description" required></textarea>
+  </div>
+  <button type="submit">Create Post</button>
 </form>
-
 
 ==============================
 
@@ -435,6 +508,8 @@ app.listen(PORT, console.log(`Server started on port ${PORT}`));
 ==============================
 
 -post.handlebars
+{{log user}}
+{{log post.author._id}}
 <h2>{{post.title}}</h2>
 <p>Posted by {{post.author.username}} on {{formatDate post.date}}</p>
 <p>{{post.description}}</p>
@@ -444,7 +519,7 @@ app.listen(PORT, console.log(`Server started on port ${PORT}`));
   <h3>Comments:</h3>
   {{#each post.comments}}
     <div>
-      <p>{{this.body}} - {{this.author.username}}</p>
+      <p>{{this.author.username}}: {{this.body}}</p>
     </div>
   {{/each}}
 {{/if}}
@@ -467,18 +542,30 @@ app.listen(PORT, console.log(`Server started on port ${PORT}`));
   {{/if}}
 {{/if}}
 
-
 ==============================
 
 -posts.handlebars
 <h2>All Posts</h2>
 {{#each posts}}
-    <div>
-        <h3><a href="/post/{{this._id}}">{{this.title}}</a></h3>
-        <p>Posted by {{this.author.username}} on {{formatDate this.date}}</p>
-    </div>
-{{/each}}
+  <div>
+    <h3><a href="/post/{{this._id}}">{{this.title}}</a></h3>
+    <p>Posted by {{this.author.username}} on {{formatDate this.date}}</p>
+    <p>Comments: {{log this.commentCount}} {{this.commentCount}}</p>
+    <!-- Previous page button -->
+    {{#if (gt current 1)}}
+      <a href="?page={{prevPage}}">Previous</a>
+    {{/if}}
 
+    <!-- Current page number -->
+    <p>Page {{current}} of {{pages}}</p>
+
+    <!-- Next page button -->
+    {{#if hasNextPage}}
+      <a href="?page={{nextPage}}">Next</a>
+    {{/if}}
+
+  </div>
+{{/each}}
 
 ==============================
 

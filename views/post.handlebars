@@ -9,7 +9,7 @@
   <h3>Comments:</h3>
   {{#each post.comments}}
     <div>
-      <p>{{this.body}} - {{this.author.username}}</p>
+      <p>{{this.author.username}}: {{this.body}}</p>
     </div>
   {{/each}}
 {{/if}}

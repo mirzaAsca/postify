@@ -5,13 +5,49 @@ const { ensureAuthenticated } = require("../config/auth");
 
 // Get all posts
 router.get("/", async (req, res) => {
-  const posts = await Post.find({}).populate("author").lean();
-  res.render("posts", { posts });
+  const perPage = 2;
+  let page = Number(req.query.page) || 1;
+
+  // Check to make sure the page number is never less than 1
+  if (page < 1) page = 1;
+
+  const posts = await Post.find({})
+    .skip(perPage * page - perPage)
+    .limit(perPage)
+    .populate("author")
+    .lean();
+
+  // Add comment count to each post
+  const postsWithCommentCount = posts.map((post) => ({
+    ...post,
+    commentCount: post.comments.length,
+  }));
+
+  const count = await Post.countDocuments();
+
+  const pages = Math.ceil(count / perPage);
+
+  // Generate an array of page numbers
+  const pageNumbers = Array.from({ length: pages }, (_, i) => i + 1);
+
+  res.render("posts", {
+    posts: postsWithCommentCount,
+    current: page,
+    totalPages: pages,  // total count of pages
+    prevPage: page - 1, // previous page number
+    nextPage: page + 1, // next page number
+    hasNextPage: page < pages, // check if there's a next page
+  });
+
+  console.log(postsWithCommentCount);
 });
 
 // Get single post
 router.get("/post/:id", async (req, res) => {
-  const post = await Post.findById(req.params.id).populate("author").lean();
+  const post = await Post.findById(req.params.id)
+    .populate("author")
+    .populate("comments.author") // populate comment authors
+    .lean();
   res.render("post", { post });
 });
 
@@ -19,8 +55,12 @@ router.get("/post/:id", async (req, res) => {
 router.get("/new", ensureAuthenticated, (req, res) => res.render("new"));
 
 router.post("/new", ensureAuthenticated, async (req, res) => {
+  console.log("Received POST request at /new");
+
   // req.body.post doesn't exist, extract title and description directly from req.body
   const { title, description } = req.body;
+  console.log("Post title:", title);
+  console.log("Post description:", description);
 
   const newPost = new Post({
     title,
@@ -29,6 +69,8 @@ router.post("/new", ensureAuthenticated, async (req, res) => {
   });
 
   await newPost.save();
+  console.log("Saved new post:", newPost);
+
   res.redirect("/");
 });
 

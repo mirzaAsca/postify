@@ -1,7 +1,21 @@
 <h2>All Posts</h2>
 {{#each posts}}
-    <div>
-        <h3><a href="/post/{{this._id}}">{{this.title}}</a></h3>
-        <p>Posted by {{this.author.username}} on {{formatDate this.date}}</p>
-    </div>
+  <div>
+    <h3><a href="/post/{{this._id}}">{{this.title}}</a></h3>
+    <p>Posted by {{this.author.username}} on {{formatDate this.date}}</p>
+    <p>Comments: {{log this.commentCount}} {{this.commentCount}}</p>
+  </div>
 {{/each}}
+
+<!-- Previous page button -->
+{{#if (gt current 1)}}
+  <a href="?page={{prevPage}}">Previous</a>
+{{/if}}
+
+<!-- Current page number -->
+<p>Page {{current}} of {{totalPages}}</p>
+
+<!-- Next page button -->
+{{#if hasNextPage}}
+  <a href="?page={{nextPage}}">Next</a>
+{{/if}}
